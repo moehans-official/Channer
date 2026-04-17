@@ -96,6 +96,10 @@ ENVIRONMENT=production
 SERVER_ADDRESS=:8080
 
 # 数据库配置
+# 支持的类型: postgres | sqlite
+DB_TYPE=postgres
+
+# PostgreSQL 配置 (当 DB_TYPE=postgres 时生效)
 DB_HOST=localhost
 DB_PORT=5432
 DB_USER=channer
@@ -103,7 +107,11 @@ DB_PASSWORD=channer
 DB_NAME=channer
 DB_SSLMODE=disable
 
-# Redis 配置
+# SQLite 配置 (当 DB_TYPE=sqlite 时生效)
+DB_PATH=./channer.db
+
+# Redis 配置 - 可选，禁用时使用内存存储
+REDIS_ENABLED=true
 REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_PASSWORD=
@@ -218,6 +226,19 @@ go run cmd/server/main.go
 ```
 
 后端服务将在 `http://localhost:8080` 运行。
+
+#### 使用 SQLite (可选)
+
+本地开发时如果不使用 PostgreSQL，可以使用 SQLite：
+
+```bash
+# 编辑 .env 文件
+DB_TYPE=sqlite
+DB_PATH=./channer.db
+
+# 运行服务器
+go run cmd/server/main.go
+```
 
 ### 前端开发
 
