@@ -22,16 +22,19 @@ type ServerConfig struct {
 
 // DatabaseConfig 数据库配置
 type DatabaseConfig struct {
+	Type     string // sqlite, postgres
 	Host     string
 	Port     int
 	User     string
 	Password string
 	DBName   string
 	SSLMode  string
+	Path     string // for sqlite
 }
 
 // RedisConfig Redis配置
 type RedisConfig struct {
+	Enabled  bool
 	Host     string
 	Port     int
 	Password string
@@ -47,20 +50,25 @@ type JWTConfig struct {
 
 // Load 加载配置
 func Load() *Config {
-	return &Config{
+	dbType := getEnv("DB_TYPE", "postgres")
+
+	config := &Config{
 		Environment: getEnv("ENVIRONMENT", "development"),
 		Server: ServerConfig{
 			Address: getEnv("SERVER_ADDRESS", ":8080"),
 		},
 		Database: DatabaseConfig{
+			Type:     dbType,
 			Host:     getEnv("DB_HOST", "localhost"),
 			Port:     getEnvAsInt("DB_PORT", 5432),
 			User:     getEnv("DB_USER", "channer"),
 			Password: getEnv("DB_PASSWORD", "channer"),
 			DBName:   getEnv("DB_NAME", "channer"),
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
+			Path:     getEnv("DB_PATH", "./channer.db"),
 		},
 		Redis: RedisConfig{
+			Enabled:  getEnv("REDIS_ENABLED", "true") == "true",
 			Host:     getEnv("REDIS_HOST", "localhost"),
 			Port:     getEnvAsInt("REDIS_PORT", 6379),
 			Password: getEnv("REDIS_PASSWORD", ""),
@@ -72,6 +80,8 @@ func Load() *Config {
 			RefreshExpiry: getEnvAsDuration("JWT_REFRESH_EXPIRY", 7*24*time.Hour),
 		},
 	}
+
+	return config
 }
 
 func getEnv(key, defaultValue string) string {

@@ -10,6 +10,7 @@ import (
 	"log"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -22,10 +23,13 @@ func main() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
-	// 初始化Redis
-	redisClient, err := model.InitRedis(cfg.Redis)
-	if err != nil {
-		log.Fatalf("Failed to initialize Redis: %v", err)
+	// 初始化Redis（可选）
+	var redisClient *redis.Client
+	if cfg.Redis.Enabled {
+		redisClient, err = model.InitRedis(cfg.Redis)
+		if err != nil {
+			log.Printf("Warning: Failed to initialize Redis: %v", err)
+		}
 	}
 
 	// 初始化仓库
@@ -134,8 +138,8 @@ func main() {
 			tenant.POST("/v1/messages", proxyHandler.AnthropicMessages)
 
 			// Gemini API
-			tenant.POST("/v1beta/models/:model:generateContent", proxyHandler.GeminiGenerate)
-			tenant.POST("/v1beta/models/:model:streamGenerateContent", proxyHandler.GeminiStream)
+			tenant.POST("/v1beta/models/:model/generateContent", proxyHandler.GeminiGenerate)
+			tenant.POST("/v1beta/models/:model/streamGenerateContent", proxyHandler.GeminiStream)
 		}
 	}
 

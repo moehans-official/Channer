@@ -4,7 +4,7 @@ import (
 	"channer/internal/model"
 	"context"
 	"fmt"
-	"strconv"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -20,41 +20,46 @@ type RateLimitService interface {
 // rateLimitService 速率限制服务实现
 type rateLimitService struct {
 	redisClient *redis.Client
+	// 内存存储，用于Redis不可用时
+	memoryStore map[string]int
+	memoryMutex sync.RWMutex
 }
 
 // NewRateLimitService 创建速率限制服务
 func NewRateLimitService(redisClient *redis.Client) RateLimitService {
-	return &rateLimitService{redisClient: redisClient}
+	return &rateLimitService{
+		redisClient: redisClient,
+		memoryStore: make(map[string]int),
+	}
 }
 
 func (s *rateLimitService) CheckRateLimit(key *model.APIKey) error {
-	ctx := context.Background()
 	now := time.Now()
 
 	// 检查RPM (每分钟请求数)
 	minuteKey := fmt.Sprintf("ratelimit:rpm:%d:%s", key.ID, now.Format("2006-01-02-15-04"))
-	minuteCount, _ := s.redisClient.Get(ctx, minuteKey).Int()
+	minuteCount := s.getCount(minuteKey)
 	if minuteCount >= key.RPMLimit {
 		return fmt.Errorf("rate limit exceeded: RPM")
 	}
 
 	// 检查TPM (每分钟Token数)
 	tpmKey := fmt.Sprintf("ratelimit:tpm:%d:%s", key.ID, now.Format("2006-01-02-15-04"))
-	tpmCount, _ := s.redisClient.Get(ctx, tpmKey).Int()
+	tpmCount := s.getCount(tpmKey)
 	if tpmCount >= key.TPMLimit {
 		return fmt.Errorf("rate limit exceeded: TPM")
 	}
 
 	// 检查RPD (每天请求数)
 	dayKey := fmt.Sprintf("ratelimit:rpd:%d:%s", key.ID, now.Format("2006-01-02"))
-	rpdCount, _ := s.redisClient.Get(ctx, dayKey).Int()
+	rpdCount := s.getCount(dayKey)
 	if rpdCount >= key.RPDLimit {
 		return fmt.Errorf("rate limit exceeded: RPD")
 	}
 
 	// 检查TPD (每天Token数)
 	tpdKey := fmt.Sprintf("ratelimit:tpd:%d:%s", key.ID, now.Format("2006-01-02"))
-	tpdCount, _ := s.redisClient.Get(ctx, tpdKey).Int()
+	tpdCount := s.getCount(tpdKey)
 	if tpdCount >= key.TPDLimit {
 		return fmt.Errorf("rate limit exceeded: TPD")
 	}
@@ -63,37 +68,28 @@ func (s *rateLimitService) CheckRateLimit(key *model.APIKey) error {
 }
 
 func (s *rateLimitService) IncrementCounter(key *model.APIKey, tokens int64) error {
-	ctx := context.Background()
 	now := time.Now()
-
-	pipe := s.redisClient.Pipeline()
 
 	// 增加RPM计数器
 	minuteKey := fmt.Sprintf("ratelimit:rpm:%d:%s", key.ID, now.Format("2006-01-02-15-04"))
-	pipe.Incr(ctx, minuteKey)
-	pipe.Expire(ctx, minuteKey, 2*time.Minute)
+	s.increment(minuteKey, 1, 2*time.Minute)
 
 	// 增加TPM计数器
 	tpmKey := fmt.Sprintf("ratelimit:tpm:%d:%s", key.ID, now.Format("2006-01-02-15-04"))
-	pipe.IncrBy(ctx, tpmKey, tokens)
-	pipe.Expire(ctx, tpmKey, 2*time.Minute)
+	s.increment(tpmKey, int(tokens), 2*time.Minute)
 
 	// 增加RPD计数器
 	dayKey := fmt.Sprintf("ratelimit:rpd:%d:%s", key.ID, now.Format("2006-01-02"))
-	pipe.Incr(ctx, dayKey)
-	pipe.Expire(ctx, dayKey, 25*time.Hour)
+	s.increment(dayKey, 1, 25*time.Hour)
 
 	// 增加TPD计数器
 	tpdKey := fmt.Sprintf("ratelimit:tpd:%d:%s", key.ID, now.Format("2006-01-02"))
-	pipe.IncrBy(ctx, tpdKey, tokens)
-	pipe.Expire(ctx, tpdKey, 25*time.Hour)
+	s.increment(tpdKey, int(tokens), 25*time.Hour)
 
-	_, err := pipe.Exec(ctx)
-	return err
+	return nil
 }
 
 func (s *rateLimitService) GetQuotaUsage(key *model.APIKey) (*model.QuotaUsage, error) {
-	ctx := context.Background()
 	now := time.Now()
 
 	minuteKey := fmt.Sprintf("ratelimit:rpm:%d:%s", key.ID, now.Format("2006-01-02-15-04"))
@@ -101,21 +97,10 @@ func (s *rateLimitService) GetQuotaUsage(key *model.APIKey) (*model.QuotaUsage, 
 	dayKey := fmt.Sprintf("ratelimit:rpd:%d:%s", key.ID, now.Format("2006-01-02"))
 	tpdKey := fmt.Sprintf("ratelimit:tpd:%d:%s", key.ID, now.Format("2006-01-02"))
 
-	pipe := s.redisClient.Pipeline()
-	rpmCmd := pipe.Get(ctx, minuteKey)
-	tpmCmd := pipe.Get(ctx, tpmKey)
-	rpdCmd := pipe.Get(ctx, dayKey)
-	tpdCmd := pipe.Get(ctx, tpdKey)
-
-	_, err := pipe.Exec(ctx)
-	if err != nil && err != redis.Nil {
-		return nil, err
-	}
-
-	rpmUsed, _ := strconv.Atoi(rpmCmd.Val())
-	tpmUsed, _ := strconv.Atoi(tpmCmd.Val())
-	rpdUsed, _ := strconv.Atoi(rpdCmd.Val())
-	tpdUsed, _ := strconv.Atoi(tpdCmd.Val())
+	rpmUsed := s.getCount(minuteKey)
+	tpmUsed := s.getCount(tpmKey)
+	rpdUsed := s.getCount(dayKey)
+	tpdUsed := s.getCount(tpdKey)
 
 	return &model.QuotaUsage{
 		RPMUsed:  rpmUsed,
@@ -127,4 +112,36 @@ func (s *rateLimitService) GetQuotaUsage(key *model.APIKey) (*model.QuotaUsage, 
 		TPDUsed:  tpdUsed,
 		TPDTotal: key.TPDLimit,
 	}, nil
+}
+
+// getCount 获取计数（优先从Redis，否则从内存）
+func (s *rateLimitService) getCount(key string) int {
+	if s.redisClient != nil {
+		ctx := context.Background()
+		count, err := s.redisClient.Get(ctx, key).Int()
+		if err == nil {
+			return count
+		}
+	}
+
+	// 从内存获取
+	s.memoryMutex.RLock()
+	defer s.memoryMutex.RUnlock()
+	return s.memoryStore[key]
+}
+
+// increment 增加计数
+func (s *rateLimitService) increment(key string, value int, expiry time.Duration) {
+	if s.redisClient != nil {
+		ctx := context.Background()
+		pipe := s.redisClient.Pipeline()
+		pipe.IncrBy(ctx, key, int64(value))
+		pipe.Expire(ctx, key, expiry)
+		pipe.Exec(ctx)
+	} else {
+		// 使用内存存储
+		s.memoryMutex.Lock()
+		defer s.memoryMutex.Unlock()
+		s.memoryStore[key] += value
+	}
 }
