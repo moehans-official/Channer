@@ -96,6 +96,10 @@ ENVIRONMENT=production
 SERVER_ADDRESS=:8080
 
 # Database Configuration
+# Supported types: postgres | sqlite
+DB_TYPE=postgres
+
+# PostgreSQL Configuration (used when DB_TYPE=postgres)
 DB_HOST=localhost
 DB_PORT=5432
 DB_USER=channer
@@ -103,7 +107,11 @@ DB_PASSWORD=channer
 DB_NAME=channer
 DB_SSLMODE=disable
 
-# Redis Configuration
+# SQLite Configuration (used when DB_TYPE=sqlite)
+DB_PATH=./channer.db
+
+# Redis Configuration - Optional, disable to use in-memory storage
+REDIS_ENABLED=true
 REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_PASSWORD=
@@ -218,6 +226,19 @@ go run cmd/server/main.go
 ```
 
 The backend will be available at `http://localhost:8080`.
+
+#### Using SQLite (Optional)
+
+For local development without PostgreSQL, you can use SQLite:
+
+```bash
+# Edit .env file
+DB_TYPE=sqlite
+DB_PATH=./channer.db
+
+# Run server
+go run cmd/server/main.go
+```
 
 ### Frontend Development
 
