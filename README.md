@@ -6,6 +6,9 @@
     <a href="https://github.com/moehans-official/Channer/blob/main/LICENSE"><img src="https://img.shields.io/github/license/moehans-official/Channer" alt="License"></a>
     <a href="https://github.com/moehans-official/Channer/releases"><img src="https://img.shields.io/github/v/release/moehans-official/Channer" alt="Release"></a>
   </p>
+  <p align="center">
+    <a href="./README.md">English</a> | <a href="./README.zh-CN.md">简体中文</a>
+  </p>
 </p>
 
 ---
