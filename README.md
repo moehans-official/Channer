@@ -1,167 +1,303 @@
-# Channer AI Gateway
+<p align="center">
+  <h1 align="center">Channer</h1>
+  <p align="center">A lightweight, multi-tenant AI Gateway for personal and small team use</p>
+  <p align="center">
+    <a href="https://github.com/moehans-official/Channer/stargazers"><img src="https://img.shields.io/github/stars/moehans-official/Channer" alt="Stars"></a>
+    <a href="https://github.com/moehans-official/Channer/blob/main/LICENSE"><img src="https://img.shields.io/github/license/moehans-official/Channer" alt="License"></a>
+    <a href="https://github.com/moehans-official/Channer/releases"><img src="https://img.shields.io/github/v/release/moehans-official/Channer" alt="Release"></a>
+  </p>
+</p>
 
-Channer是一个轻量级个人AI Gateway，支持多租户、API代理转发、负载均衡和预付费计费。
+---
 
-## 技术栈
+## Overview
 
-- **后端**: Go 1.25 + Gin + GORM
-- **数据库**: PostgreSQL 15+
-- **缓存**: Redis 7+
-- **前端**: React 18 + TypeScript + Vite + Tailwind CSS
+Channer is a lightweight AI Gateway designed for individuals and small teams who need a unified interface to manage multiple AI providers. It provides API key management, request routing, load balancing, and prepaid billing with a clean, modern web interface.
 
-## 支持的AI提供商
+### Key Features
 
-- OpenAI (Chat Completions / Responses API)
-- Anthropic Claude
-- Google Gemini
+- **Multi-Provider Support**: OpenAI, Anthropic Claude, Google Gemini
+- **Multi-Tenant Architecture**: Manage multiple API keys with isolated quotas and balances
+- **Smart Load Balancing**: Route requests based on channel priority with automatic failover
+- **Prepaid Billing**: Reserve-then-settle billing model for accurate cost tracking
+- **Rate Limiting**: Configurable RPM/TPM/RPD/TPD limits per API key
+- **Usage Analytics**: Dashboard with real-time statistics and request logs
+- **RESTful API**: OpenAI-compatible endpoints for seamless integration
 
-## 核心功能
+## Quick Start
 
-1. **多租户管理**: 管理员创建API Key，无账户系统，用户通过Key查询余额和配额
-2. **API代理转发**: 统一转发各AI提供商的API请求
-3. **负载均衡**: 支持按优先级分配请求到不同渠道
-4. **预付费计费**: 请求时预扣0.1额度，完成后根据实际Token修正计费
+### Prerequisites
 
-## 快速开始
+- Docker 20.10+
+- Docker Compose 2.0+
 
-### 使用Docker Compose部署
+### Installation
 
 ```bash
-# 克隆项目
-git clone https://github.com/yourusername/channer.git
-cd channer
+# Clone the repository
+git clone https://github.com/moehans-official/Channer.git
+cd Channer
 
-# 启动服务
+# Start all services
 docker-compose up -d
 
-# 等待服务启动完成（约30秒）
+# Wait for services to initialize (about 30 seconds)
 sleep 30
-
-# 访问管理后台
-open http://localhost:3000
 ```
 
-默认管理员账号:
-- 用户名: `admin`
-- 密码: `admin123`
+### Access the Dashboard
 
-### 本地开发
+Open your browser and navigate to: `http://localhost:3000`
 
-#### 后端开发
+**Default Credentials:**
+- Username: `admin`
+- Password: `admin123`
+
+> **Security Note**: Change the default password immediately after first login.
+
+## Architecture
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   React Frontend │────▶│   Go Backend    │────▶│   PostgreSQL   │
+│   (Port 3000)   │     │   (Port 8080)   │     │   (Port 5432)  │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+                               │
+                               ▼
+                        ┌─────────────────┐
+                        │     Redis       │
+                        │   (Port 6379)   │
+                        └─────────────────┘
+```
+
+### Technology Stack
+
+| Component | Technology |
+|-----------|------------|
+| Backend | Go 1.25, Gin Framework, GORM |
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS |
+| Database | PostgreSQL 15+ |
+| Cache | Redis 7+ |
+| Authentication | JWT |
+| State Management | Zustand |
+
+## Configuration
+
+### Environment Variables
+
+Create a `.env` file in the `backend` directory:
+
+```env
+# Server Configuration
+ENVIRONMENT=production
+SERVER_ADDRESS=:8080
+
+# Database Configuration
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=channer
+DB_PASSWORD=channer
+DB_NAME=channer
+DB_SSLMODE=disable
+
+# Redis Configuration
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
+
+# JWT Configuration
+JWT_SECRET=your-secret-key-here
+JWT_ACCESS_EXPIRY=24h
+JWT_REFRESH_EXPIRY=168h
+```
+
+### Channel Configuration
+
+Channels represent AI provider connections. Configure them in the dashboard:
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| Name | Unique identifier | `openai-primary` |
+| Type | Provider type | `openai`, `anthropic`, `gemini` |
+| Base URL | API endpoint | `https://api.openai.com` |
+| API Key | Provider API key | `sk-...` |
+| Priority | Lower value = higher priority | `0`, `1`, `2` |
+
+### Model Configuration
+
+Define pricing and availability for each model:
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| Model ID | Provider model identifier | `gpt-4o` |
+| Input Price | Cost per 1K input tokens | `0.005` |
+| Output Price | Cost per 1K output tokens | `0.015` |
+
+### API Key Quotas
+
+Configure rate limits per API key:
+
+| Limit | Description | Default |
+|-------|-------------|---------|
+| RPM | Requests per minute | 60 |
+| TPM | Tokens per minute | 100,000 |
+| RPD | Requests per day | 10,000 |
+| TPD | Tokens per day | 1,000,000 |
+
+## API Reference
+
+### Authentication
+
+All tenant API requests require an API key in the Authorization header:
+
+```bash
+curl -H "Authorization: Bearer sk-channer-xxx" \
+  http://localhost:8080/api/v1/chat/completions
+```
+
+### Endpoints
+
+#### Tenant APIs
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/info` | Get API key information |
+| POST | `/v1/chat/completions` | OpenAI-compatible chat completions |
+| POST | `/v1/responses` | OpenAI Responses API |
+| POST | `/v1/messages` | Anthropic Messages API |
+| POST | `/v1beta/models/:model:generateContent` | Gemini Generate Content |
+
+#### Admin APIs
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/auth/login` | Administrator login |
+| GET | `/api/v1/admin/channels` | List channels |
+| POST | `/api/v1/admin/channels` | Create channel |
+| GET | `/api/v1/admin/models` | List models |
+| POST | `/api/v1/admin/models` | Create model |
+| GET | `/api/v1/admin/keys` | List API keys |
+| POST | `/api/v1/admin/keys` | Create API key |
+| POST | `/api/v1/admin/keys/:id/recharge` | Recharge balance |
+| GET | `/api/v1/admin/stats/dashboard` | Dashboard statistics |
+
+## Billing Model
+
+Channer uses a reserve-then-settle billing approach:
+
+1. **Pre-deduction**: Each request reserves $0.10 from the API key balance
+2. **Settlement**: After request completion, actual cost is calculated based on token usage
+3. **Adjustment**: The difference is refunded or additionally charged
+4. **Insufficient Balance**: Returns HTTP 402 if balance is below $0.10
+
+### Cost Calculation
+
+```
+Total Cost = (Input Tokens × Input Price + Output Tokens × Output Price) / 1000
+```
+
+## Development
+
+### Backend Development
 
 ```bash
 cd backend
 
-# 复制环境变量文件
-cp .env.example .env
-
-# 安装依赖
+# Install dependencies
 go mod download
 
-# 运行开发服务器
+# Copy environment file
+cp .env.example .env
+
+# Run development server
 go run cmd/server/main.go
 ```
 
-后端服务将运行在 `http://localhost:8080`
+The backend will be available at `http://localhost:8080`.
 
-#### 前端开发
+### Frontend Development
 
 ```bash
 cd frontend
 
-# 安装依赖
+# Install dependencies
 npm install
 
-# 启动开发服务器
+# Start development server
 npm run dev
 ```
 
-前端服务将运行在 `http://localhost:5173`
+The frontend will be available at `http://localhost:5173`.
 
-## 项目结构
+### Running Tests
+
+```bash
+# Backend tests
+cd backend
+go test ./...
+
+# Frontend tests
+cd frontend
+npm test
+```
+
+## Project Structure
 
 ```
-channer/
-├── backend/              # Go后端服务
-│   ├── cmd/server/       # 入口程序
-│   ├── internal/         # 内部包
-│   │   ├── config/       # 配置管理
-│   │   ├── handler/      # HTTP处理器
-│   │   ├── middleware/   # 中间件
-│   │   ├── model/        # 数据模型
-│   │   ├── repository/   # 数据访问层
-│   │   └── service/      # 业务逻辑层
-│   ├── pkg/              # 公共包
+Channer/
+├── backend/
+│   ├── cmd/server/          # Application entry point
+│   ├── internal/
+│   │   ├── config/          # Configuration management
+│   │   ├── handler/         # HTTP request handlers
+│   │   ├── middleware/      # HTTP middleware
+│   │   ├── model/           # Database models
+│   │   ├── repository/      # Data access layer
+│   │   └── service/         # Business logic
 │   ├── Dockerfile
 │   └── go.mod
-├── frontend/             # React前端
+├── frontend/
 │   ├── src/
-│   │   ├── api/          # API客户端
-│   │   ├── components/   # 组件
-│   │   ├── pages/        # 页面
-│   │   └── stores/       # 状态管理
+│   │   ├── api/             # API client
+│   │   ├── components/      # React components
+│   │   ├── pages/           # Page components
+│   │   └── stores/          # State management
 │   ├── Dockerfile
 │   └── package.json
 ├── docker-compose.yml
 └── README.md
 ```
 
-## API端点
+## Roadmap
 
-### 管理API (需要JWT认证)
+- [ ] Support for more AI providers (Azure OpenAI, Cohere, etc.)
+- [ ] Streaming response optimization
+- [ ] Advanced analytics and reporting
+- [ ] Webhook notifications
+- [ ] API key usage alerts
+- [ ] Multi-language support
 
-- `POST /api/v1/auth/login` - 管理员登录
-- `GET /api/v1/admin/channels` - 渠道列表
-- `POST /api/v1/admin/channels` - 创建渠道
-- `GET /api/v1/admin/models` - 模型列表
-- `POST /api/v1/admin/models` - 创建模型
-- `GET /api/v1/admin/keys` - API Key列表
-- `POST /api/v1/admin/keys` - 创建API Key
-- `POST /api/v1/admin/keys/:id/recharge` - 充值
-- `GET /api/v1/admin/stats/dashboard` - 仪表板统计
+## Contributing
 
-### 租户API (需要API Key)
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-- `GET /api/v1/info` - 查询API Key信息
-- `POST /api/v1/chat/completions` - OpenAI Chat Completions
-- `POST /api/v1/responses` - OpenAI Responses
-- `POST /api/v1/messages` - Anthropic Messages
-- `POST /api/v1beta/models/:model:generateContent` - Gemini Generate
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-## 配置说明
+## License
 
-### 渠道配置
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-在管理后台添加渠道时需要配置:
+## Acknowledgments
 
-- **名称**: 渠道标识
-- **类型**: openai / anthropic / gemini
-- **API地址**: 提供商API基础URL
-- **API Key**: 提供商的API密钥
-- **优先级**: 数值越小优先级越高
+- Built with [Gin](https://github.com/gin-gonic/gin) web framework
+- UI powered by [Tailwind CSS](https://tailwindcss.com)
+- Icons from [Lucide](https://lucide.dev)
 
-### 模型配置
+---
 
-配置支持的AI模型:
-
-- **模型ID**: 如 `gpt-4o`, `claude-3-opus-20240229`
-- **输入价格**: 每1K Token的价格
-- **输出价格**: 每1K Token的价格
-
-### API Key配额
-
-- **RPM**: 每分钟请求数限制
-- **TPM**: 每分钟Token数限制
-- **RPD**: 每天请求数限制
-- **TPD**: 每天Token数限制
-
-## 计费说明
-
-1. 请求时预扣0.1额度
-2. 请求完成后根据实际Token使用量计算费用
-3. 多退少补，修正余额
-4. 余额不足时返回402错误
-
-## 许可证
-
-MIT
+<p align="center">Made with ❤️ for the AI community</p>
