@@ -5,6 +5,7 @@ import (
 	"channer/internal/repository"
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -22,6 +23,9 @@ type BillingService interface {
 type billingService struct {
 	keyRepo     repository.APIKeyRepository
 	redisClient *redis.Client
+	// 内存锁，用于Redis不可用时
+	memoryLocks map[uint]*sync.Mutex
+	locksMutex  sync.RWMutex
 }
 
 // NewBillingService 创建计费服务
@@ -29,6 +33,7 @@ func NewBillingService(keyRepo repository.APIKeyRepository, redisClient *redis.C
 	return &billingService{
 		keyRepo:     keyRepo,
 		redisClient: redisClient,
+		memoryLocks: make(map[uint]*sync.Mutex),
 	}
 }
 
@@ -37,15 +42,9 @@ const (
 )
 
 func (s *billingService) PreDeduct(key *model.APIKey) error {
-	ctx := context.Background()
-
-	// 使用Redis分布式锁防止并发问题
-	lockKey := fmt.Sprintf("billing:lock:%d", key.ID)
-	locked, err := s.redisClient.SetNX(ctx, lockKey, "1", 10*time.Second).Result()
-	if err != nil || !locked {
-		return fmt.Errorf("failed to acquire lock")
-	}
-	defer s.redisClient.Del(ctx, lockKey)
+	// 获取锁
+	unlock := s.acquireLock(key.ID)
+	defer unlock()
 
 	// 检查余额
 	if key.Balance < preDeductAmount {
@@ -57,39 +56,19 @@ func (s *billingService) PreDeduct(key *model.APIKey) error {
 		return err
 	}
 
-	// 记录预扣信息到Redis
-	preDeductKey := fmt.Sprintf("billing:prededuct:%d", key.ID)
-	s.redisClient.Set(ctx, preDeductKey, preDeductAmount, 5*time.Minute)
-
 	return nil
 }
 
 func (s *billingService) FinalizeBilling(key *model.APIKey, inputTokens, outputTokens int64, m *model.Model) error {
-	ctx := context.Background()
-
-	// 使用Redis分布式锁
-	lockKey := fmt.Sprintf("billing:lock:%d", key.ID)
-	locked, err := s.redisClient.SetNX(ctx, lockKey, "1", 10*time.Second).Result()
-	if err != nil || !locked {
-		return fmt.Errorf("failed to acquire lock")
-	}
-	defer s.redisClient.Del(ctx, lockKey)
+	// 获取锁
+	unlock := s.acquireLock(key.ID)
+	defer unlock()
 
 	// 计算实际费用
 	actualCost := s.CalculateCost(inputTokens, outputTokens, m)
 
-	// 获取预扣金额
-	preDeductKey := fmt.Sprintf("billing:prededuct:%d", key.ID)
-	preDeducted, _ := s.redisClient.Get(ctx, preDeductKey).Float64()
-	if preDeducted == 0 {
-		preDeducted = preDeductAmount
-	}
-
-	// 清除预扣记录
-	s.redisClient.Del(ctx, preDeductKey)
-
 	// 计算差额
-	diff := preDeducted - actualCost
+	diff := preDeductAmount - actualCost
 
 	// 多退少补
 	if diff > 0 {
@@ -104,20 +83,12 @@ func (s *billingService) FinalizeBilling(key *model.APIKey, inputTokens, outputT
 }
 
 func (s *billingService) Refund(key *model.APIKey) error {
-	ctx := context.Background()
+	// 获取锁
+	unlock := s.acquireLock(key.ID)
+	defer unlock()
 
-	// 获取预扣金额
-	preDeductKey := fmt.Sprintf("billing:prededuct:%d", key.ID)
-	preDeducted, _ := s.redisClient.Get(ctx, preDeductKey).Float64()
-
-	if preDeducted > 0 {
-		// 清除预扣记录
-		s.redisClient.Del(ctx, preDeductKey)
-		// 退款
-		return s.keyRepo.Recharge(key.ID, preDeducted)
-	}
-
-	return nil
+	// 退款
+	return s.keyRepo.Recharge(key.ID, preDeductAmount)
 }
 
 func (s *billingService) CalculateCost(inputTokens, outputTokens int64, m *model.Model) float64 {
@@ -130,3 +101,36 @@ func (s *billingService) CalculateCost(inputTokens, outputTokens int64, m *model
 
 	return inputCost + outputCost
 }
+
+// acquireLock 获取分布式锁（优先Redis，否则使用内存锁）
+func (s *billingService) acquireLock(keyID uint) func() {
+	if s.redisClient != nil {
+		// 使用Redis分布式锁
+		lockKey := fmt.Sprintf("billing:lock:%d", keyID)
+		for {
+			locked, _ := s.redisClient.SetNX(ctx, lockKey, "1", 10*time.Second).Result()
+			if locked {
+				return func() {
+					s.redisClient.Del(ctx, lockKey)
+				}
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	// 使用内存锁
+	s.locksMutex.Lock()
+	lock, exists := s.memoryLocks[keyID]
+	if !exists {
+		lock = &sync.Mutex{}
+		s.memoryLocks[keyID] = lock
+	}
+	s.locksMutex.Unlock()
+
+	lock.Lock()
+	return func() {
+		lock.Unlock()
+	}
+}
+
+var ctx = context.Background()
