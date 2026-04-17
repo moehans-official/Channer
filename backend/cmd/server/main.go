@@ -7,11 +7,18 @@ import (
 	"channer/internal/model"
 	"channer/internal/repository"
 	"channer/internal/service"
+	"embed"
+	"io"
+	"io/fs"
 	"log"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 )
+
+//go:embed dist
+var staticFiles embed.FS
 
 func main() {
 	// 加载配置
@@ -78,6 +85,38 @@ func main() {
 	// 健康检查
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
+	})
+
+	// 静态文件服务 (前端)
+	efs, _ := fs.Sub(staticFiles, "dist")
+	r.Use(func(c *gin.Context) {
+		path := c.Request.URL.Path
+		if strings.HasPrefix(path, "/api") || strings.HasPrefix(path, "/v1") {
+			c.Next()
+			return
+		}
+		file, err := efs.Open(path)
+		if err != nil {
+			indexData, _ := staticFiles.ReadFile("dist/index.html")
+			c.Data(200, "text/html; charset=utf-8", indexData)
+			c.Abort()
+			return
+		}
+		defer file.Close()
+		fi, err := file.Stat()
+		if err != nil || fi.IsDir() {
+			indexData, _ := staticFiles.ReadFile("dist/index.html")
+			c.Data(200, "text/html; charset=utf-8", indexData)
+			c.Abort()
+			return
+		}
+		content, err := io.ReadAll(file)
+		if err != nil {
+			c.Next()
+			return
+		}
+		c.Data(200, "application/octet-stream", content)
+		c.Abort()
 	})
 
 	// API路由组

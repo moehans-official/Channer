@@ -31,9 +31,11 @@ services:
       timeout: 5s
       retries: 5
 
-  backend:
-    image: ghcr.io/moehans-official/channer-backend:latest
-    container_name: channer-backend
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: channer-app
     environment:
       ENVIRONMENT: production
       SERVER_ADDRESS: :8080
@@ -49,23 +51,12 @@ services:
       REDIS_DB: 0
       JWT_SECRET: channer-jwt-secret-change-in-production
     ports:
-      - "8080:8080"
+      - "3000:8080"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    restart: unless-stopped
-
-  frontend:
-    image: ghcr.io/moehans-official/channer-frontend:latest
-    container_name: channer-frontend
-    environment:
-      VITE_API_URL: http://localhost:8080/api/v1
-    ports:
-      - "3000:80"
-    depends_on:
-      - backend
     restart: unless-stopped
 
 volumes:
