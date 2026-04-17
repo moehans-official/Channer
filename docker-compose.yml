@@ -32,9 +32,7 @@ services:
       retries: 5
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ghcr.io/moehans-official/channer-backend:latest
     container_name: channer-backend
     environment:
       ENVIRONMENT: production
@@ -60,9 +58,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    image: ghcr.io/moehans-official/channer-frontend:latest
     container_name: channer-frontend
     environment:
       VITE_API_URL: http://localhost:8080/api/v1

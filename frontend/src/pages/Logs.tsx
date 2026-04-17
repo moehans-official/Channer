@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { useStatsStore } from '../stores/statsStore';
-import { FileText, AlertCircle } from 'lucide-react';
+import { FileText } from 'lucide-react';
 
 export function LogsPage() {
   const { logs, fetchLogs, loading } = useStatsStore();

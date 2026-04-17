@@ -1,10 +1,13 @@
 # 构建阶段
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
 # 安装依赖
 RUN apk add --no-cache git
+
+# 设置 Go 代理
+ENV GOPROXY=https://goproxy.cn,direct
 
 # 复制go mod文件
 COPY go.mod go.sum ./
