@@ -15,9 +15,11 @@ import (
 // AuthService 认证服务接口
 type AuthService interface {
 	Login(username, password string) (string, string, error)
+	Register(username, password, email string) (string, string, error)
 	RefreshToken(refreshToken string) (string, string, error)
 	ValidateToken(token string) (*model.User, error)
 	CreateDefaultAdmin() error
+	CreateDefaultRoot() error
 }
 
 // authService 认证服务实现
@@ -142,6 +144,56 @@ func (s *authService) CreateDefaultAdmin() error {
 	}
 
 	return s.userRepo.Create(admin)
+}
+
+func (s *authService) Register(username, password, email string) (string, string, error) {
+	_, err := s.userRepo.GetByUsername(username)
+	if err == nil {
+		return "", "", errors.New("username already exists")
+	}
+
+	hash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	user := &model.User{
+		Username:     username,
+		PasswordHash: string(hash),
+		Email:        email,
+		Role:         model.RoleUser,
+		IsActive:     true,
+	}
+
+	if err := s.userRepo.Create(user); err != nil {
+		return "", "", err
+	}
+
+	accessToken, err := s.generateToken(user, "access", s.jwtConfig.AccessExpiry)
+	if err != nil {
+		return "", "", err
+	}
+
+	refreshToken, err := s.generateToken(user, "refresh", s.jwtConfig.RefreshExpiry)
+	if err != nil {
+		return "", "", err
+	}
+
+	return accessToken, refreshToken, nil
+}
+
+func (s *authService) CreateDefaultRoot() error {
+	_, err := s.userRepo.GetByUsername("root")
+	if err == nil {
+		return nil
+	}
+
+	hash, _ := bcrypt.GenerateFromPassword([]byte("root123"), bcrypt.DefaultCost)
+	root := &model.User{
+		Username:     "root",
+		PasswordHash: string(hash),
+		Email:        "root@channer.local",
+		Role:         model.RoleRoot,
+		IsActive:     true,
+	}
+
+	return s.userRepo.Create(root)
 }
 
 func (s *authService) generateToken(user *model.User, tokenType string, expiry time.Duration) (string, error) {

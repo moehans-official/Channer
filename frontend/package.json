@@ -10,7 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ant-design/icons": "^6.1.1",
     "@tailwindcss/postcss": "^4.2.2",
+    "antd": "^6.3.6",
     "autoprefixer": "^10.5.0",
     "axios": "^1.15.0",
     "lucide-react": "^1.8.0",

@@ -6,12 +6,22 @@ import (
 	"gorm.io/gorm"
 )
 
+// UserRole 用户角色
+type UserRole string
+
+const (
+	RoleUser  UserRole = "user"
+	RoleAdmin UserRole = "admin"
+	RoleRoot  UserRole = "root"
+)
+
 // User 管理员用户
 type User struct {
 	ID           uint           `gorm:"primaryKey" json:"id"`
 	Username     string         `gorm:"uniqueIndex;size:50;not null" json:"username"`
 	PasswordHash string         `gorm:"size:255;not null" json:"-"`
 	Email        string         `gorm:"size:100" json:"email"`
+	Role         UserRole       `gorm:"size:20;default:'user'" json:"role"`
 	IsActive     bool           `gorm:"default:true" json:"is_active"`
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`

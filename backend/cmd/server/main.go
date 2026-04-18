@@ -69,6 +69,11 @@ func main() {
 		log.Printf("Failed to create default admin: %v", err)
 	}
 
+	// 创建默认超级管理员账户
+	if err := authService.CreateDefaultRoot(); err != nil {
+		log.Printf("Failed to create default root: %v", err)
+	}
+
 	// 设置Gin模式
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -126,6 +131,7 @@ func main() {
 		auth := api.Group("/auth")
 		{
 			auth.POST("/login", authHandler.Login)
+			auth.POST("/register", authHandler.Register)
 			auth.POST("/refresh", authHandler.Refresh)
 		}
 

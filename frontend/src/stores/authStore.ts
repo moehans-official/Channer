@@ -1,16 +1,17 @@
 import { create } from 'zustand';
-import { authApi, LoginRequest } from '../api/auth';
+import { authApi } from '../api/auth';
 
 interface User {
   id: number;
   username: string;
   email: string;
+  role: string;
 }
 
 interface AuthState {
   isAuthenticated: boolean;
   user: User | null;
-  login: (data: LoginRequest) => Promise<void>;
+  login: (data: { username: string; password: string }) => Promise<void>;
   logout: () => void;
   checkAuth: () => boolean;
 }
